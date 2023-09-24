@@ -1,40 +1,29 @@
-About
-=====
+关于
+反射式DLL注入是一种库注入技术，它利用了反射编程的概念，将一个库从内存加载到宿主进程中。因此，库负责通过实现一个最小的可移植可执行文件（PE）文件加载器来加载自身。然后，它可以在最小与宿主系统和进程的交互下，控制如何加载和与宿主进行交互。
 
-Reflective DLL injection is a library injection technique in which the concept of reflective programming is employed to perform the loading of a library from memory into a host process. As such the library is responsible for loading itself by implementing a minimal Portable Executable (PE) file loader. It can then govern, with minimal interaction with the host system and process, how it will load and interact with the host.
+该注入技术适用于从Windows NT4到Windows 8，以及x86、x64和适用的ARM平台。
 
-Injection works from Windows NT4 up to and including Windows 8, running on x86, x64 and ARM where applicable.
+概览
+远程将一个库注入到进程的过程分为两步。首先，你希望注入的库必须被写入目标进程的地址空间中（以下简称为宿主进程）。其次，需要以一种使库的运行时期望得到满足的方式将库加载到宿主进程中，例如解析其导入项或将其重定位到合适的内存位置。
 
-Overview
-========
+假设我们在宿主进程中拥有代码执行权限，并且希望注入的库已经被写入到宿主进程内存的任意位置，反射式DLL注入的工作原理如下：
 
-The process of remotely injecting a library into a process is two fold. Firstly, the library you wish to inject must be written into the address space of the target process (Herein referred to as the host process). Secondly the library must be loaded into that host process in such a way that the library's run time expectations are met, such as resolving its imports or relocating it to a suitable location in memory.
+执行权被传递给库的ReflectiveLoader函数，可以通过CreateRemoteThread()或一个小型引导shellcode来实现，这个函数是库的导出表中的一个导出函数。
+由于库的映像当前存在于内存的任意位置，ReflectiveLoader首先会计算自己映像在内存中的当前位置，以便能够稍后解析自己的头部。
+ReflectiveLoader然后解析宿主进程的kernel32.dll导出表，以计算加载器所需的三个函数的地址，即LoadLibraryA、GetProcAddress和VirtualAlloc。
+ReflectiveLoader现在将分配一块连续的内存区域，用于加载自己的映像。由于加载器稍后将正确重定位映像，所以位置并不重要。
+库的头部和段被加载到内存的新位置。
+ReflectiveLoader然后处理新加载的映像的导入表，加载任何附加的库并解析其各自导入的函数地址。
+ReflectiveLoader然后处理新加载的映像的重定位表。
+ReflectiveLoader然后调用其新加载的映像的入口点函数DllMain，参数为DLL_PROCESS_ATTACH。库现在已经成功加载到内存中。
+最后，ReflectiveLoader将执行权返回给最初调用它的引导shellcode，或者如果是通过CreateRemoteThread调用的，则线程将终止。
+构建
+在Visual Studio C++中打开“rdi.sln”文件，并在Release模式下构建解决方案，以生成inject.exe和reflective_dll.dll。
 
-Assuming we have code execution in the host process and the library we wish to inject has been written into an arbitrary location of memory in the host process, Reflective DLL Injection works as follows.
+用法
+使用inject.exe将reflective_dll.dll注入到宿主进程中，通过进程ID进行注入，例如：
 
-* Execution is passed, either via CreateRemoteThread() or a tiny bootstrap shellcode, to the library's ReflectiveLoader function which is an exported function found in the library's export table.
-* As the library's image will currently exists in an arbitrary location in memory the ReflectiveLoader will first calculate its own image's current location in memory so as to be able to parse its own headers for use later on.
-* The ReflectiveLoader will then parse the host processes kernel32.dll export table in order to calculate the addresses of three functions required by the loader, namely LoadLibraryA, GetProcAddress and VirtualAlloc.
-* The ReflectiveLoader will now allocate a continuous region of memory into which it will proceed to load its own image. The location is not important as the loader will correctly relocate the image later on.
-* The library's headers and sections are loaded into their new locations in memory.
-* The ReflectiveLoader will then process the newly loaded copy of its image's import table, loading any additional library's and resolving their respective imported function addresses.
-* The ReflectiveLoader will then process the newly loaded copy of its image's relocation table.
-* The ReflectiveLoader will then call its newly loaded image's entry point function, DllMain with DLL_PROCESS_ATTACH. The library has now been successfully loaded into memory.
-* Finally the ReflectiveLoader will return execution to the initial bootstrap shellcode which called it, or if it was called via CreateRemoteThread, the thread will terminate.
+inject.exe 1234
 
-Build
-=====
-
-Open the 'rdi.sln' file in Visual Studio C++ and build the solution in Release mode to make inject.exe and reflective_dll.dll
-
-Usage
-=====
-
-To test use the inject.exe to inject reflective_dll.dll into a host process via a process id, e.g.:
-
-> inject.exe 1234
-	
-License
-=======
-
-Licensed under a 3 clause BSD license, please see LICENSE.txt for details.
+许可证
+根据3条款的BSD许可证授权，详细信息请参见LICENSE.txt。
